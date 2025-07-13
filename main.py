@@ -3,15 +3,6 @@ import pgzrun
 import random
 from pgzero import music
 from pgzero.actor import Actor
-#print('点赞了吗')
-#while True :
- #   a=str(input())
-#    if a=='点了':
-#        print('信你一回')
-#        break 
-#    else :
-       # while True :
-            #print('先赞后玩')
         
     
 #更换背景音乐
