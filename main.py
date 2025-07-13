@@ -31,6 +31,8 @@ def init():
     global slot,cards
     slot.clear()
     cards.clear()
+    # 打印出r的值，表示第几关
+    print(f"当前关卡: {r}")
     if r == 1:
         #更换第1关卡牌，每张卡牌的出现次数需要是3的倍数！
         actors = ['1_2.png', '1_1.png', '1_3.png', '1_2.png', '1_1.png', '1_3.png', '1_2.png', '1_1.png', '1_3.png', '1_2.png','1_1.png', '1_3.png', '1_2.png', '1_1.png', '1_3.png', '1_2.png', '1_1.png', '1_3.png']
