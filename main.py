@@ -1,5 +1,8 @@
+# -*- coding: utf-8 -*-
 import pgzrun
 import random
+from pgzero import music
+from pgzero.actor import Actor
 #print('点赞了吗')
 #while True :
  #   a=str(input())
