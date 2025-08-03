@@ -6,3 +6,8 @@
 # Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
+/inspectionProfiles/profiles_settings.xml
+/misc.xml
+/modules.xml
+/vcs.xml
+/xiaofeng-game1.iml
