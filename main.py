@@ -50,7 +50,7 @@ def init():
     if r == 2:
         #更换第2关卡牌，每张卡牌的出现次数需要是3的倍数！
         actors = ['2_1.png','2_1.png','2_1.png','2_1.png','2_1.png','2_1.png','2_2.png','2_2.png','2_2.png','2_2.png','2_2.png','2_2.png','2_3.png','2_3.png','2_3.png','2_3.png','2_3.png','2_3.png','2_4.png','2_4.png','2_4.png','2_4.png','2_4.png','2_4.png','2_5.png','2_5.png','2_5.png','2_5.png','2_5.png','2_5.png']
-        actors = ['1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_!.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png']
+        actors = ['1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png','1_1.png']
         random.shuffle(actors)
         for i in range(12):
             card = Actor(actors[i], (65+120 * (i % 6 + 1), 160 * (i // 6 + 1) - 20))
