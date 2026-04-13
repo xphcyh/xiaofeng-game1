@@ -1,6 +1,10 @@
 import pgzrun
 import random
 
+import pgzero.screen
+from pgzero import screen
+from pgzero.actor import Actor
+
 HEIGHT = 600
 WIDTH = 800
 sList = []

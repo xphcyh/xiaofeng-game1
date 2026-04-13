@@ -1,0 +1,14 @@
+{
+    // 通义灵码配置
+    "tongyi-lingma.apiKey": "sk-sp-941d860b329e4d868481d374a1bc95e2",
+    
+    // 启用 Coding Plan 功能
+    "tongyi-lingma.enableCodingPlan": true,
+    
+    // Python 相关配置
+    "python.defaultInterpreterPath": "python",
+    
+    // 文件编码
+    "files.encoding": "utf8",
+    "Lingma.localMachineModel": true
+}

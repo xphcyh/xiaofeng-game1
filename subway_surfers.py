@@ -1,7 +1,6 @@
 import pgzrun
 import random
 from pgzero.actor import Actor
-from pgzero.keyboard import keyboard
 from pgzero.rect import Rect
 
 # 游戏常量
@@ -12,8 +11,8 @@ JUMP_SPEED = -10
 SCROLL_SPEED = 5
 OBSTACLE_FREQUENCY = 60  # 每60帧生成一次障碍物
 COIN_FREQUENCY = 100     # 每100帧生成一次金币
-ITEM_FREQUENCY = 300     # 每300帧生成一次道具
 ITEM_DURATION = 300      # 道具持续时间（5秒，基于60帧/秒）
+# ITEM_FREQUENCY 已不再使用
 
 # 玩家类
 class Player:
@@ -168,9 +167,10 @@ active_item = None  # 当前激活的道具
 game_time = 0  # 游戏时间（秒）
 show_leaderboard = False  # 是否显示排行榜
 leaderboard = []  # 排行榜数据
+last_item_score = 0  # 上一个道具生成时的分数
 
 def update():
-    global score, game_over, frame_count, coins_collected, active_item, game_time, show_leaderboard, leaderboard
+    global score, game_over, frame_count, coins_collected, active_item, game_time, show_leaderboard, leaderboard, last_item_score
     
     if game_over and not show_leaderboard:
         # 保存分数并加载排行榜
@@ -199,10 +199,11 @@ def update():
         lane = random.randint(0, 2)
         coins.append(Coin(lane))
     
-    # 生成道具
-    if frame_count % ITEM_FREQUENCY == 0:
+    # 生成道具 - 每100分生成一次
+    if int(score) // 100 > last_item_score // 100:
         lane = random.randint(0, 2)
         items.append(Item(lane))
+        last_item_score = int(score)
     
     # 更新障碍物并检测碰撞
     for obstacle in obstacles[:]:
@@ -237,14 +238,18 @@ def update():
             active_item.timer = ITEM_DURATION  # 道具持续5秒(300帧)
     
     # 更新激活的道具
-    if active_item and not active_item.active:
-        active_item = None
+    if active_item and active_item.active:
+        active_item.timer -= 1
+        if active_item.timer <= 0:
+            active_item.active = False
+            active_item = None
     
     # 增加分数
     score += 0.1
     frame_count += 1
 
 def draw():
+    global screen
 
     screen.clear()
     screen.fill((135, 206, 235))  # 天空蓝背景
@@ -320,7 +325,7 @@ def draw():
         screen.draw.text("SPACE=Jump LEFT/RIGHT=Move", center=(WIDTH//2, HEIGHT - 20), fontsize=20, color="white")
 
 def on_key_down(key):
-    global game_over, score, obstacles, player, frame_count, coins, items, coins_collected, active_item, game_time, show_leaderboard
+    global game_over, score, obstacles, player, frame_count, coins, items, coins_collected, active_item, game_time, show_leaderboard, last_item_score
     
     if game_over and key == keys.R:
         # 重启游戏
@@ -335,6 +340,7 @@ def on_key_down(key):
         active_item = None
         game_time = 0
         show_leaderboard = False
+        last_item_score = 0
     elif not game_over:
         if key == keys.SPACE:
             player.jump()
