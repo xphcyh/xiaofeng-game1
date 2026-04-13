@@ -265,18 +265,19 @@ class Enemy:
         """升级敌人"""
         # 保存旧的最大血量，用于显示提升效果
         old_max_health = self.max_health
-        
+            
         self.level += 1
-        # 血量提升：每级增加30%
+        # 血量提升：每级增加 30%
         self.max_health = int(self.max_health * 1.3)
-        self.health = self.max_health  # 升级时回满血
-        # 攻击力提升：每级增加20%
+        # 升级时只恢复 50% 血量，而不是回满，增加游戏策略性
+        self.health = max(self.health, int(self.max_health * 0.5))
+        # 攻击力提升：每级增加 20%
         self.damage = int(self.damage * 1.2)
-        # 经验值提升：每级增加25%，让玩家获得更多奖励
+        # 经验值提升：每级增加 25%，让玩家获得更多奖励
         self.exp_value = int(self.exp_value * 1.25)
         # 更新颜色
         self.color = self.get_level_color()
-        
+            
         # 返回升级信息，用于显示
         return {
             'old_max_health': old_max_health,
@@ -380,8 +381,15 @@ class ExperienceGem:
         self.magnet_range = 100
         self.speed = 4
     
-    def update(self, player_x, player_y):
-        """更新位置（被玩家吸引）"""
+    def update(self, player_x, player_y, player_radius=15):
+        """更新位置（被玩家吸引）
+        参数:
+            player_x: 玩家 x 坐标
+            player_y: 玩家 y 坐标
+            player_radius: 玩家半径，用于判断是否被收集
+        返回:
+            bool: 如果宝石被玩家收集则返回 True，否则返回 False
+        """
         dx = player_x - self.x
         dy = player_y - self.y
         distance = math.sqrt(dx**2 + dy**2)
@@ -390,7 +398,8 @@ class ExperienceGem:
             self.x += (dx / distance) * self.speed
             self.y += (dy / distance) * self.speed
         
-        return distance < self.radius + 15  # 被玩家收集
+        # 使用玩家半径判断是否被收集，而不是硬编码
+        return distance < self.radius + player_radius
     
     def draw(self, screen):
         """绘制经验宝石"""
@@ -629,8 +638,8 @@ class Game:
                 'id': 'health_up',
                 'name': '最大生命提升',
                 'description': '最大生命 +30',
-                'apply': lambda p: (setattr(p, 'max_health', p.max_health + 30), 
-                                   setattr(p, 'health', p.health + 30))
+                'apply': lambda p: (setattr(p, 'max_health', p.max_health + 30),
+                                   setattr(p, 'health', min(p.max_health + 30, p.health + 30)))
             },
             {
                 'id': 'projectile_count',
@@ -781,18 +790,22 @@ class Game:
         """更新闪电效果"""
         if not self.player.has_lightning:
             return
-        
+            
         current_time = pygame.time.get_ticks()
         if current_time - self.lightning_timer >= self.player.lightning_interval:
+            # 限制同一时间内的闪电特效数量，避免性能问题
+            max_lightning_effects = 5
+            lightning_count = 0
+                
             # 对范围内所有敌人造成伤害并创建闪电特效
             for enemy in self.enemies[:]:
                 dx = enemy.x - self.player.x
                 dy = enemy.y - self.player.y
                 distance = math.sqrt(dx**2 + dy**2)
-                
+                    
                 if distance <= self.player.attack_range * 1.5:
-                    # 创建闪电特效(限制数量)
-                    if len(self.effects) < 20:
+                    # 创建闪电特效 (限制数量)
+                    if lightning_count < max_lightning_effects:
                         lightning_effect = VisualEffect(
                             self.player.x, self.player.y,
                             'lightning',
@@ -803,28 +816,29 @@ class Game:
                             max_alpha=200
                         )
                         self.effects.append(lightning_effect)
-                    
+                        lightning_count += 1
+                        
                     # 对敌人造成伤害
                     enemy.take_damage(self.player.lightning_damage)
                     # 添加伤害数字
                     self.add_damage_number(enemy.x, enemy.y - enemy.radius, self.player.lightning_damage)
-                    
+                        
                     # 如果敌人死亡
                     if enemy.health <= 0:
                         self.create_exp_gem(enemy)
                         self.score += 1
                         self.enemies.remove(enemy)
-            
+                
             self.lightning_timer = current_time
     
     def update_explosion(self):
         """更新爆炸效果"""
         if not self.player.has_explosion:
             return
-        
+            
         current_time = pygame.time.get_ticks()
         if current_time - self.explosion_timer >= self.player.explosion_interval:
-            # 创建爆炸特效(限制数量)
+            # 只创建一个全局爆炸特效，而不是对每个敌人都创建
             if len(self.effects) < 20:
                 explosion_effect = VisualEffect(
                     self.player.x, self.player.y,
@@ -835,25 +849,25 @@ class Game:
                     max_alpha=220
                 )
                 self.effects.append(explosion_effect)
-            
+                
             # 对范围内所有敌人造成伤害
             for enemy in self.enemies[:]:
                 dx = enemy.x - self.player.x
                 dy = enemy.y - self.player.y
                 distance = math.sqrt(dx**2 + dy**2)
-                
+                    
                 if distance <= self.player.explosion_radius:
                     # 对敌人造成伤害
                     enemy.take_damage(self.player.explosion_damage)
                     # 添加伤害数字
                     self.add_damage_number(enemy.x, enemy.y - enemy.radius, self.player.explosion_damage)
-                    
+                        
                     # 如果敌人死亡
                     if enemy.health <= 0:
                         self.create_exp_gem(enemy)
                         self.score += 1
                         self.enemies.remove(enemy)
-            
+                
             self.explosion_timer = current_time
     
     def update_shields(self):
@@ -1243,11 +1257,11 @@ class Game:
         self.projectiles = []  # 清空子弹/投射物列表
         self.exp_gems = []  # 清空经验宝石列表
         self.effects = []  # 重置特效列表
-        self.score = 0  # 重置分数为0
-        self.wave = 1  # 重置波次数为1
+        self.score = 0  # 重置分数为 0
+        self.wave = 1  # 重置波次数为 1
         self.enemies_spawned = 0  # 重置已生成敌人计数器
-        self.enemies_per_wave = 10  # 重置每波敌人数量为10
-        self.spawn_interval = 2000  # 重置敌人生成间隔为2秒
+        self.enemies_per_wave = 35  # 重置初始敌人数量为 35
+        self.spawn_interval = 600  # 重置生成间隔为 600 毫秒
         self.game_over = False  # 重置游戏结束标志
         self.paused = False  # 重置暂停标志
         self.waiting_for_choice = False  # 重置等待选择标志
@@ -1257,9 +1271,7 @@ class Game:
         self.explosion_timer = 0  # 重置爆炸效果计时器
         self.enemy_upgrade_timer = 0  # 重置敌人升级计时器
         self.enemy_upgrade_paused_time = 0  # 重置敌人升级暂停时间
-        self.enemy_level = 1  # 重置敌人等级为1
-        self.enemies_per_wave = 35  # 重置初始敌人数量为35
-        self.spawn_interval = 600  # 重置生成间隔为600毫秒
+        self.enemy_level = 1  # 重置敌人等级为 1
     
     def upgrade_all_enemies(self):
         """升级所有敌人并发射子弹
@@ -1461,8 +1473,8 @@ class Game:
 
                 # 更新经验宝石
                 for gem in self.exp_gems[:]:  # 遍历所有经验宝石
-                    # 检查经验宝石是否被玩家拾取
-                    if gem.update(self.player.x, self.player.y):
+                    # 检查经验宝石是否被玩家拾取，传入玩家半径参数
+                    if gem.update(self.player.x, self.player.y, self.player.radius):
                         # 玩家获得经验，如果升级则显示升级界面
                         if self.player.gain_exp(gem.value):
                             self.show_level_up_screen()
@@ -1479,9 +1491,12 @@ class Game:
 
                 # 检查敌人升级
                 current_time = pygame.time.get_ticks()
-                # 检查是否到达敌人升级时间
-                if current_time - self.enemy_upgrade_timer >= self.enemy_upgrade_interval:
+                # 检查是否到达敌人升级时间，并且当前没有在等待确认
+                if (current_time - self.enemy_upgrade_timer >= self.enemy_upgrade_interval and 
+                    not self.waiting_for_enemy_upgrade):
                     self.waiting_for_enemy_upgrade = True  # 设置等待敌人升级标志
+                    # 立即重置计时器，防止反复触发
+                    self.enemy_upgrade_timer = current_time
 
             # 绘制游戏画面
             self.screen.fill(DARK_GRAY)  # 填充深灰色背景
@@ -1502,9 +1517,21 @@ class Game:
             for effect in self.effects:
                 effect.draw(self.screen)  # 绘制每个特效
 
-            # 绘制玩家
+            # 绘制玩家（游戏结束时显示死亡效果）
             if not self.game_over:
-                self.player.draw(self.screen)  # 绘制玩家
+                self.player.draw(self.screen)
+            else:
+                # 游戏结束时绘制灰色玩家角色，表示死亡
+                pygame.draw.circle(self.screen, GRAY, (int(self.player.x), int(self.player.y)), self.player.radius)
+                pygame.draw.circle(self.screen, WHITE, (int(self.player.x), int(self.player.y)), self.player.radius, 2)
+                # 绘制 X 标记
+                x_offset = 8
+                pygame.draw.line(self.screen, RED, 
+                               (int(self.player.x) - x_offset, int(self.player.y) - x_offset),
+                               (int(self.player.x) + x_offset, int(self.player.y) + x_offset), 3)
+                pygame.draw.line(self.screen, RED,
+                               (int(self.player.x) + x_offset, int(self.player.y) - x_offset),
+                               (int(self.player.x) - x_offset, int(self.player.y) + x_offset), 3)  # 绘制玩家
 
             # 绘制环绕护盾(带特效)
             if self.player.has_orbiting_shield and not self.game_over:  # 如果玩家有环绕护盾且游戏未结束
