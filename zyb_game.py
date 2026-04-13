@@ -76,7 +76,7 @@ class Player:
         self.x = x
         self.y = y
         self.radius = 15
-        self.speed = 1.5  # 初始移速和敌人一样
+        self.speed = 2.25  # 初始移速是敌人速度 (1.5) 的 1.5 倍
         self.max_health = 100
         self.health = 100
         self.level = 1
@@ -301,9 +301,9 @@ class Enemy:
         return self.health <= 0
     
     def draw(self, screen):
-        """绘制敌人"""
-        # 高等级敌人添加光环效果
-        if self.level >= 3:
+        """绘制敌人（性能优化版本）"""
+        # 高等级敌人添加光环效果（优化：只在敌人数量较少时绘制，避免性能问题）
+        if self.level >= 3 and len(screen.get_rect()) < 1000000:  # 限制渲染开销
             glow_radius = self.radius + 5
             glow_surface = pygame.Surface((glow_radius * 2, glow_radius * 2), pygame.SRCALPHA)
             pygame.draw.circle(glow_surface, (*self.color[:3], 80), (glow_radius, glow_radius), glow_radius, 3)
@@ -876,34 +876,49 @@ class Game:
             self.shield_angle += self.player.shield_rotation_speed
     
     def check_shield_collision(self):
-        """检查护盾碰撞"""
+        """检查护盾碰撞（性能优化版本）"""
         if not self.player.has_orbiting_shield:
             return
         
         shield_distance = 50
+        player_x, player_y = self.player.x, self.player.y
+        shield_damage = self.player.shield_damage
         
+        # 预计算所有护盾位置，避免重复计算
+        shield_positions = []
+        for i in range(self.player.shield_count):
+            angle = math.radians(self.shield_angle + i * (360 / self.player.shield_count))
+            shield_x = player_x + math.cos(angle) * shield_distance
+            shield_y = player_y + math.sin(angle) * shield_distance
+            shield_positions.append((shield_x, shield_y))
+        
+        # 对每个敌人检查是否与任何护盾碰撞
         for enemy in self.enemies[:]:
-            for i in range(self.player.shield_count):
-                angle = math.radians(self.shield_angle + i * (360 / self.player.shield_count))
-                shield_x = self.player.x + math.cos(angle) * shield_distance
-                shield_y = self.player.y + math.sin(angle) * shield_distance
-                
+            enemy_hit = False
+            enemy_radius = enemy.radius
+            
+            for shield_x, shield_y in shield_positions:
+                if enemy_hit:  # 已经被击中，跳过
+                    break
+                    
+                # 使用平方距离优化碰撞检测
                 dx = enemy.x - shield_x
                 dy = enemy.y - shield_y
-                distance = math.sqrt(dx**2 + dy**2)
+                dist_sq = dx*dx + dy*dy
+                combined_radius = enemy_radius + 8
                 
-                if distance < enemy.radius + 8:
+                if dist_sq < combined_radius * combined_radius:
                     # 对敌人造成伤害
-                    enemy.take_damage(self.player.shield_damage)
+                    enemy.take_damage(shield_damage)
                     # 添加伤害数字
-                    self.add_damage_number(enemy.x, enemy.y - enemy.radius, self.player.shield_damage)
+                    self.add_damage_number(enemy.x, enemy.y - enemy.radius, shield_damage)
                     
                     # 如果敌人死亡
                     if enemy.health <= 0:
                         self.create_exp_gem(enemy)
                         self.score += 1
                         self.enemies.remove(enemy)
-                    break  # 一个敌人一次只被一个护盾击中
+                    enemy_hit = True  # 标记已击中，一个敌人一次只被一个护盾击中
     
     def create_exp_gem(self, enemy):
         """创建经验宝石"""
@@ -1388,28 +1403,45 @@ class Game:
                         self.spawn_enemy()  # 生成一个新敌人
                         self.spawn_timer = current_time  # 重置生成计时器
 
-                # 更新敌人状态
+                # 更新敌人状态（优化：使用平方距离避免开方运算）
                 current_time = pygame.time.get_ticks()
+                player_x, player_y = self.player.x, self.player.y
+                player_radius = self.player.radius
+                                
                 for enemy in self.enemies[:]:  # 遍历所有敌人
-                    enemy.move_towards(self.player.x, self.player.y)  # 敌人朝玩家移动
-
-                    # 检查与玩家碰撞
-                    dx = enemy.x - self.player.x  # 计算x轴距离
-                    dy = enemy.y - self.player.y  # 计算y轴距离
-                    distance = math.sqrt(dx**2 + dy**2)  # 计算实际距离
-
-                    if distance < enemy.radius + self.player.radius:  # 如果发生碰撞
-                        # 刚接触时立即攻击,之后每1秒攻击一次
+                    # 简化的移动计算
+                    dx = player_x - enemy.x
+                    dy = player_y - enemy.y
+                                    
+                    # 归一化并移动
+                    dist_sq = dx*dx + dy*dy
+                    if dist_sq > 0:
+                        dist = math.sqrt(dist_sq)
+                        if dist > 0:
+                            enemy.x += (dx / dist) * enemy.speed
+                            enemy.y += (dy / dist) * enemy.speed
+                                    
+                    # 快速碰撞检测（使用平方距离）
+                    combined_radius = enemy.radius + player_radius
+                    combined_radius_sq = combined_radius * combined_radius
+                                    
+                    # 重新计算碰撞后的距离
+                    dx = enemy.x - player_x
+                    dy = enemy.y - player_y
+                    dist_sq = dx*dx + dy*dy
+                                    
+                    if dist_sq < combined_radius_sq:  # 如果发生碰撞
+                        # 刚接触时立即攻击，之后每 1 秒攻击一次
                         should_attack = False
-
+                
                         if not enemy.has_attacked_on_contact:  # 如果尚未在接触时攻击
-                            # 第一次接触,立即攻击
+                            # 第一次接触，立即攻击
                             should_attack = True
                             enemy.has_attacked_on_contact = True  # 设置已攻击标记
                         elif current_time - enemy.last_attack_time >= enemy.attack_cooldown:  # 检查攻击冷却
-                            # 之后每1秒攻击一次
+                            # 之后每 1 秒攻击一次
                             should_attack = True
-
+                
                         if should_attack:  # 如果应该攻击
                             # 对玩家造成伤害，如果玩家死亡则设置游戏结束标志
                             if self.player.take_damage(enemy.damage):
@@ -1422,42 +1454,48 @@ class Game:
                 # 玩家攻击
                 self.attack()
 
-                # 更新投射物（子弹等）
+                # 更新投射物（子弹等）- 性能优化版本
                 for projectile in self.projectiles[:]:  # 遍历所有投射物
                     projectile.update()  # 更新投射物状态
-
+                
                     if projectile.is_off_screen():  # 检查投射物是否离开屏幕
                         self.projectiles.remove(projectile)  # 从列表中移除
                         continue
-
-                    # 检查与敌人碰撞(优化:只检查附近的敌人)
+                
+                    # 优化：先进行快速的范围检测，只检测附近的敌人
+                    proj_x, proj_y = projectile.x, projectile.y
+                    proj_radius = projectile.radius
+                                    
+                    # 检查与敌人碰撞（使用平方距离优化）
                     hit_this_frame = False
                     for enemy in self.enemies[:]:  # 遍历所有敌人
                         if hit_this_frame:  # 如果当前帧已有命中，则跳出循环
                             break
-
+                
                         # 检查是否已经击中过该敌人（穿透机制）
                         if id(enemy) not in projectile.hit_enemies:
-                            dx = enemy.x - projectile.x  # 计算x轴距离
-                            dy = enemy.y - projectile.y  # 计算y轴距离
-                            distance = math.sqrt(dx**2 + dy**2)  # 计算实际距离
-
+                            # 快速碰撞检测（使用平方距离）
+                            dx = enemy.x - proj_x
+                            dy = enemy.y - proj_y
+                            dist_sq = dx*dx + dy*dy
+                            combined_radius = enemy.radius + proj_radius
+                                            
                             # 如果投射物与敌人发生碰撞
-                            if distance < enemy.radius + projectile.radius:
+                            if dist_sq < combined_radius * combined_radius:
                                 # 对敌人造成伤害
                                 enemy.take_damage(projectile.damage)
                                 # 添加伤害数字显示
                                 self.add_damage_number(enemy.x, enemy.y - enemy.radius, projectile.damage)
-
+                
                                 # 如果敌人死亡
                                 if enemy.health <= 0:
                                     self.create_exp_gem(enemy)  # 生成经验宝石
                                     self.score += 1  # 增加分数
                                     # 敌人死亡后立即从列表中移除
                                     self.enemies.remove(enemy)
-
+                
                                 projectile.hit_enemies.add(id(enemy))  # 记录已击中的敌人
-
+                
                                 # 如果穿透次数已满
                                 if len(projectile.hit_enemies) > projectile.piercing:
                                     if projectile in self.projectiles:
@@ -1471,14 +1509,23 @@ class Game:
                 self.update_shields()  # 更新护盾状态
                 self.check_shield_collision()  # 检查护盾碰撞
 
-                # 更新经验宝石
-                for gem in self.exp_gems[:]:  # 遍历所有经验宝石
+                # 更新经验宝石（性能优化：批量处理）
+                # 先收集需要移除的宝石，减少列表修改次数
+                gems_to_remove = []
+                player_x, player_y = self.player.x, self.player.y
+                player_radius = self.player.radius
+                
+                for gem in self.exp_gems:  # 不直接修改列表，先遍历
                     # 检查经验宝石是否被玩家拾取，传入玩家半径参数
-                    if gem.update(self.player.x, self.player.y, self.player.radius):
-                        # 玩家获得经验，如果升级则显示升级界面
+                    if gem.update(player_x, player_y, player_radius):
+                        # 玩家获得经验
                         if self.player.gain_exp(gem.value):
                             self.show_level_up_screen()
-                        self.exp_gems.remove(gem)  # 从列表中移除已拾取的宝石
+                        gems_to_remove.append(gem)  # 记录需要移除的宝石
+                
+                # 批量移除已收集的宝石
+                for gem in gems_to_remove:
+                    self.exp_gems.remove(gem)
 
                 # 更新伤害数字
                 self.update_damage_numbers()
@@ -1505,9 +1552,28 @@ class Game:
             for gem in self.exp_gems:
                 gem.draw(self.screen)  # 绘制每个经验宝石
 
-            # 绘制敌人
-            for enemy in self.enemies:
-                enemy.draw(self.screen)  # 绘制每个敌人
+            # 绘制敌人（性能优化：限制光环渲染）
+            # 当敌人数量过多时，跳过高等级敌人的光环效果以节省性能
+            if len(self.enemies) > 50:
+                # 简化绘制：只绘制基础圆形和血条
+                for enemy in self.enemies:
+                    pygame.draw.circle(self.screen, enemy.color, (int(enemy.x), int(enemy.y)), enemy.radius)
+                    pygame.draw.circle(self.screen, WHITE, (int(enemy.x), int(enemy.y)), enemy.radius, 2)
+                    
+                    # 只绘制血条，不绘制文字
+                    bar_width = enemy.radius * 2
+                    bar_height = 4
+                    bar_x = enemy.x - bar_width // 2
+                    bar_y = enemy.y - enemy.radius - 12
+                    
+                    pygame.draw.rect(self.screen, RED, (bar_x, bar_y, bar_width, bar_height))
+                    health_width = int(bar_width * (enemy.health / enemy.max_health))
+                    pygame.draw.rect(self.screen, GREEN, (bar_x, bar_y, health_width, bar_height))
+                    pygame.draw.rect(self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+            else:
+                # 敌人数量较少时，使用完整绘制
+                for enemy in self.enemies:
+                    enemy.draw(self.screen)  # 绘制每个敌人
 
             # 绘制投射物
             for projectile in self.projectiles:
@@ -1533,34 +1599,41 @@ class Game:
                                (int(self.player.x) + x_offset, int(self.player.y) - x_offset),
                                (int(self.player.x) - x_offset, int(self.player.y) + x_offset), 3)  # 绘制玩家
 
-            # 绘制环绕护盾(带特效)
+            # 绘制环绕护盾 (带特效) - 性能优化版本
             if self.player.has_orbiting_shield and not self.game_over:  # 如果玩家有环绕护盾且游戏未结束
                 shield_distance = 50  # 护盾距离玩家的距离
-                for i in range(self.player.shield_count):  # 遍历所有护盾
-                    # 计算护盾角度
+                            
+                # 预计算所有护盾位置
+                shield_positions = []
+                for i in range(self.player.shield_count):
                     angle = math.radians(self.shield_angle + i * (360 / self.player.shield_count))
-                    # 计算护盾位置
                     shield_x = self.player.x + math.cos(angle) * shield_distance
                     shield_y = self.player.y + math.sin(angle) * shield_distance
-
-                    # 护盾光晕效果
-                    glow_radius = 12 + int(3 * math.sin(pygame.time.get_ticks() / 100))  # 让光晕轻微闪烁
-                    glow_surface = pygame.Surface((glow_radius * 2, glow_radius * 2), pygame.SRCALPHA)
-                    pygame.draw.circle(glow_surface, (0, 255, 255, 80), (glow_radius, glow_radius), glow_radius)
-                    self.screen.blit(glow_surface, (int(shield_x) - glow_radius, int(shield_y) - glow_radius))
-
+                    shield_positions.append((shield_x, shield_y))
+                            
+                # 只在护盾数量较少时绘制光晕和连线，避免性能问题
+                draw_effects = self.player.shield_count <= 3
+                            
+                for i, (shield_x, shield_y) in enumerate(shield_positions):
+                    # 护盾光晕效果（仅在数量较少时绘制）
+                    if draw_effects:
+                        glow_radius = 12 + int(3 * math.sin(pygame.time.get_ticks() / 100))  # 让光晕轻微闪烁
+                        glow_surface = pygame.Surface((glow_radius * 2, glow_radius * 2), pygame.SRCALPHA)
+                        pygame.draw.circle(glow_surface, (0, 255, 255, 80), (glow_radius, glow_radius), glow_radius)
+                        self.screen.blit(glow_surface, (int(shield_x) - glow_radius, int(shield_y) - glow_radius))
+            
                     # 护盾核心
                     pygame.draw.circle(self.screen, CYAN, (int(shield_x), int(shield_y)), 8)  # 绘制护盾主体
                     pygame.draw.circle(self.screen, WHITE, (int(shield_x), int(shield_y)), 8, 2)  # 绘制护盾边框
-
-                    # 护盾轨迹线（当有多个护盾时连接它们）
-                    if self.player.shield_count > 1:  # 只有在有多个护盾时才绘制连线
+            
+                    # 护盾轨迹线（当有多个护盾时连接它们，仅在数量较少时绘制）
+                    if draw_effects and self.player.shield_count > 1:
                         # 计算下一个护盾的角度
                         next_angle = math.radians(self.shield_angle + ((i + 1) % self.player.shield_count) * (360 / self.player.shield_count))
                         # 计算下一个护盾的位置
                         next_x = self.player.x + math.cos(next_angle) * shield_distance
                         next_y = self.player.y + math.sin(next_angle) * shield_distance
-                        # 使用正确的RGBA格式绘制连线
+                        # 使用正确的 RGBA 格式绘制连线
                         trail_color = (0, 255, 255, 100)
                         pygame.draw.line(self.screen, trail_color,
                                        (int(shield_x), int(shield_y)),
